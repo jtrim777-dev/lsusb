@@ -1,23 +1,12 @@
-# jvmutil
+# lsusb
 
-A utility for viewing and managing the currently installed and active JVMs on macOS
+A macOS utility which prints a colorized tree view of the attached USB devices
+with some useful metadata.
 
+## Installation
+
+### Homebrew
 ```
-usage: jvmutil [-h] [-q] [-y] {list,active,find,switch} ...
-
-A utility for viewing and managing the currently installed and active JVMs on macOS
-
-options:
-  -h, --help            show this help message and exit
-  -q, --quiet           Reduce informational messages
-  -y, --force-first     Always choose the first option
-
-subcommands:
-  The action to perform
-
-  {list,active,find,switch}
-    list                List the available JVMS
-    active              Get the currently selected JVM
-    find                Get info about an installed JVM
-    switch              Change the active JVM
+brew tap jtrim777-dev/tap
+brew install jtrim777-dev/tap/lsusb
 ```
