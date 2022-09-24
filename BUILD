@@ -31,7 +31,7 @@ deploy_artifact(
 deploy_brew(
     name = "deploy-formula",
     checksum = ":lsusb-pkg_hash.sha256",
-    formula = "//:lsusb.rb",
+    formula = "//:lsusb-tree.rb",
     release = "https://github.com/jtrim777-dev/homebrew-tap.git",
     snapshot = "https://github.com/jtrim777-dev/homebrew-tap.git",
     version_file = "//:VERSION",

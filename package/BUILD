@@ -9,7 +9,7 @@ pkg_tar(
 )
 
 pkg_tar(
-    name = "manpage-tar",
+    name = "lsusb",
     srcs = ["man/lsusb.man"],
     mode = "0444",
     extension = "1.gz",
@@ -20,6 +20,6 @@ pkg_tar(
 pkg_tar(
     name = "share-tar",
     visibility = ["//:__pkg__"],
-    srcs = [":manpage-tar.1.gz"],
+    srcs = [":lsusb.1.gz"],
     package_dir = "/share/man/man1"
 )
