@@ -4,7 +4,7 @@ load("@rules_pkg//:pkg.bzl", "pkg_tar")
 load("//tools:hash.bzl", "hashes")
 
 pkg_tar(
-    name = "jvmutil-pkg",
+    name = "lsusb-pkg",
     deps = [
       "//package:bin-tar",
       "//package:share-tar"
@@ -13,16 +13,16 @@ pkg_tar(
 )
 
 hashes(
-  name = "jvmutil-pkg_hash",
-  src = ":jvmutil-pkg.tgz",
+  name = "lsusb-pkg_hash",
+  src = ":lsusb-pkg.tgz",
 )
 
 deploy_artifact(
   name = "deploy-pkg",
-  target = ":jvmutil-pkg.tgz",
+  target = ":lsusb-pkg.tgz",
   version_file = "//:VERSION",
-  artifact_group = "dev.jtrim777.jvmutil",
-  artifact_name = "jvmutil-pkg.tgz",
+  artifact_group = "dev.jtrim777.lsusb",
+  artifact_name = "lsusb-pkg.tgz",
   release = "https://maven.jtrim777.dev/releases",
   snapshot = "https://maven.jtrim777.dev/snapshots",
   visibility = ["//visibility:private"]
@@ -30,8 +30,8 @@ deploy_artifact(
 
 deploy_brew(
     name = "deploy-formula",
-    checksum = ":jvmutil-pkg_hash.sha256",
-    formula = "//:jvmutil.rb",
+    checksum = ":lsusb-pkg_hash.sha256",
+    formula = "//:lsusb.rb",
     release = "https://github.com/jtrim777-dev/homebrew-tap.git",
     snapshot = "https://github.com/jtrim777-dev/homebrew-tap.git",
     version_file = "//:VERSION",

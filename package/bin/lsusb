@@ -1,0 +1,196 @@
+#!/usr/bin/env python3
+
+from subprocess import run
+import json
+
+def search_usb_object(obj, tgt, limit=16):
+    if limit == 0:
+        return None
+
+    if type(obj) != dict:
+        print("Expected object but found %s" % json.dumps(obj))
+        return None
+
+    if 'locationID' in obj and obj['locationID'] == tgt:
+        return obj
+    elif 'IORegistryEntryChildren' in obj:
+        return search_usb_array(obj['IORegistryEntryChildren'], tgt, limit=limit-1)
+    else:
+        return None
+
+def search_usb_array(arr, tgt, limit=16):
+    if limit == 0:
+        return None
+
+    if type(arr) != list:
+        print("Expected array but found %s" % json.dumps(arr))
+        return None
+
+    for item in arr:
+        trez = search_usb_object(item, tgt, limit=limit-1)
+        if trez:
+            return trez
+
+    return None
+
+def gen_dict_extract(key, var):
+    if isinstance(var, dict):
+        for k, v in var.items():
+            if k == key:
+                yield v
+            if isinstance(v, dict):
+                for result in gen_dict_extract(key, v):
+                    yield result
+            elif isinstance(v, list):
+                for d in v:
+                    for result in gen_dict_extract(key, d):
+                        yield result
+
+
+def indent(txt):
+    return '\n'.join(['    ' + s for s in txt.split('\n')])
+
+def bar_indent(txt):
+    lines = txt.split('\n')
+
+    f = lines[0]
+    r = lines[1:]
+
+    ffmt = '|---' + f + '\n'
+
+    return ffmt + '\n'.join(['|   ' + s for s in r])
+
+def color(txt, cols):
+    if type(cols) is list:
+        head = ''.join("\u001b[%im" % col for col in cols)
+    else:
+        head = "\u001b[%im" % cols
+
+    return head + txt + '\u001b[0m'
+
+
+def load_usb_items(extra_data):
+    rez = run(["system_profiler", "-json", "SPUSBDataType"], capture_output=True)
+
+    if rez.returncode != 0:
+        raise Exception("Failed to load USB items: " + rez.stderr.decode())
+
+    jdata = json.loads(rez.stdout.decode())
+    return [ USBItem.from_json(d, extra_data) for d in jdata['SPUSBDataType'] ]
+
+class USBItem:
+    def __init__(self, name: str, kind: str, tag: str, meta: dict, children: list):
+        self.name = name
+        self.kind = kind
+        self.tag = tag
+        self.meta = meta
+        self.children = children
+
+    kind_cols = {'port':93, 'hub':94, 'node':32}
+    def __repr__(self):
+        init = '+ ' if self.kind in ['port, hub'] else 'o '
+        l1 = color(init + self.name, [USBItem.kind_cols[self.kind], 1])
+
+        if len(self.tag) > 0:
+            l1 += color(' ' + self.tag, 35)
+
+        if len(self.meta) > 0:
+            meta = ' | '.join([color("%s: %s" % (k, v), 36) for k,v in self.meta.items()])
+            ml = "\n| " + meta
+        else:
+            ml = ""
+
+        if self.kind == 'node':
+            cl = ""
+        elif len(self.children) == 0:
+            cl = '\n' + bar_indent(color("<No Children>", 90))
+        else:
+            cl = '\n' + '\n'.join([bar_indent(str(i)) for i in self.children])
+
+        return l1 + ml + cl + '\n'
+
+    @staticmethod
+    def from_json(item: dict, extra_data):
+        if 'host_controller' in item:
+            kind = "port"
+        elif '_items' in item:
+            kind = "hub"
+        else:
+            kind = 'node'
+
+        name = item['_name'].strip()
+
+        if kind != 'port':
+            vendor = item['vendor_id'].split(' ')[0]
+            product = item['product_id']
+            tag = " (%s/%s)" % (vendor, product)
+        else:
+            tag = ""
+
+        meta = {}
+        if 'Media' in item:
+            volumes = []
+            for media in item['Media']:
+                volumes += media['volumes']
+
+            for (i, vol) in enumerate(volumes, start = 1):
+                voldata = "%s (%s)" % (vol['_name'], vol['size'])
+                if 'mount_point' in vol:
+                    voldata += " @ %s" % vol['mount_point']
+                key = "Volume %i" % i
+                meta[key] = voldata
+
+        if kind == 'node':
+            loc = int(item['location_id'].split(' ')[0], 16)
+            extra = search_usb_array(extra_data.get(), loc)
+            if extra:
+                dials = list(gen_dict_extract('IODialinDevice', extra))
+                if len(dials) > 0:
+                    meta['Serial Port'] = dials[0]
+
+        children = []
+        if '_items' in item:
+            children = [ USBItem.from_json(i, extra_data) for i in item['_items'] ]
+
+        return USBItem(name, kind, tag, meta, children)
+
+class USBExtraData:
+    def __init__(self):
+        self.data = None
+
+    def _sp_verify(self, r):
+        if r.returncode != 0:
+            raise Exception("Failed to load data: " + r.stderr.decode())
+
+    def load(self):
+        ioregz = run(["ioreg", "-r", "-c", "IOUSBHostDevice", "-l", "-a"], capture_output=True)
+        self._sp_verify(ioregz)
+
+        plistDat = ioregz.stdout.decode().strip() \
+            .replace("<data>", "<string>") \
+            .replace("</data>", "</string>") \
+            .replace("<date>", "<string>") \
+            .replace("</date>", "</string>")
+
+        if len(plistDat) == 0:
+            return []
+
+        puz = run(['plutil', '-convert', 'json', '-', '-o', '-'], input=plistDat.encode(), capture_output=True)
+        self._sp_verify(puz)
+
+        return json.loads(puz.stdout.decode())
+
+
+    def get(self):
+        if self.data:
+            return self.data
+        else:
+            self.data = self.load()
+            return self.data
+
+extra_data = USBExtraData()
+
+items = load_usb_items(extra_data)
+
+for i in items:
+    print(i)

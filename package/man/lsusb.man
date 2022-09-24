@@ -1,0 +1,11 @@
+.\" Manpage for lsusb.
+.TH man 1 "23 September 2022" "0.1.0" "lsusb manpage"
+.SH NAME
+lsusb \- print data about attached USB devices
+.SH SYNOPSIS
+lsusb
+.SH DESCRIPTION
+Prints a colorized tree view of the attached USB devices with some useful
+metadata
+.SH AUTHOR
+Jake Trimble (https://github.com/jtrim777-dev/)
