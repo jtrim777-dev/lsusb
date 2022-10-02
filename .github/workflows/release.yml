@@ -16,7 +16,7 @@ jobs:
         uses: actions/checkout@v2
       - name: Execute Deployment
         id: exec_deploy
-        uses: jtrim777-dev/bazeldist-action
+        uses: jtrim777-dev/bazeldist-action@main
         with:
           tag: ${{ inputs.tag }}
           version_file: "VERSION"
