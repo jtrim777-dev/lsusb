@@ -1,0 +1,38 @@
+name: Release
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "The tag name to run this against"
+        required: true
+        type: string
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v2
+      - name: Execute Deployment
+        id: exec_deploy
+        uses: jtrim777-dev/bazeldist-action
+        with:
+          tag: ${{ inputs.tag }}
+          version_file: "VERSION"
+          version_sub_files: package/man/lsusb.man
+          bazel_targets: "//:deploy-pkg,//:deploy-formula"
+          email: "jatrimble777@gmail.com"
+          github_token: ${{ secrets.XREPO_TOKEN }}
+          dist_user: ${{ secrets.bazeldist_user }}
+          dist_token: ${{ secrets.bazeldist_token }}
+      - name: Commit version update
+        uses: EndBug/add-and-commit@v7
+        with:
+          author_name: GitHub Actions
+          author_email: Jtrim777
+          message: 'Update versioning info'
+          branch: main
+          pull: 'NO-PULL'
+          push: true
+          tag: 'v${{ steps.exec_deploy.outputs.version }} --force'
