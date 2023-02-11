@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-
+import sys
 from subprocess import run
 import json
+
 
 def search_usb_object(obj, tgt, limit=16):
     if limit == 0:
@@ -14,9 +15,10 @@ def search_usb_object(obj, tgt, limit=16):
     if 'locationID' in obj and obj['locationID'] == tgt:
         return obj
     elif 'IORegistryEntryChildren' in obj:
-        return search_usb_array(obj['IORegistryEntryChildren'], tgt, limit=limit-1)
+        return search_usb_array(obj['IORegistryEntryChildren'], tgt, limit=limit - 1)
     else:
         return None
+
 
 def search_usb_array(arr, tgt, limit=16):
     if limit == 0:
@@ -27,11 +29,12 @@ def search_usb_array(arr, tgt, limit=16):
         return None
 
     for item in arr:
-        trez = search_usb_object(item, tgt, limit=limit-1)
+        trez = search_usb_object(item, tgt, limit=limit - 1)
         if trez:
             return trez
 
     return None
+
 
 def gen_dict_extract(key, var):
     if isinstance(var, dict):
@@ -50,6 +53,7 @@ def gen_dict_extract(key, var):
 def indent(txt):
     return '\n'.join(['    ' + s for s in txt.split('\n')])
 
+
 def bar_indent(txt):
     lines = txt.split('\n')
 
@@ -59,6 +63,7 @@ def bar_indent(txt):
     ffmt = '|---' + f + '\n'
 
     return ffmt + '\n'.join(['|   ' + s for s in r])
+
 
 def color(txt, cols):
     if type(cols) is list:
@@ -76,26 +81,47 @@ def load_usb_items(extra_data):
         raise Exception("Failed to load USB items: " + rez.stderr.decode())
 
     jdata = json.loads(rez.stdout.decode())
-    return [ USBItem.from_json(d, extra_data) for d in jdata['SPUSBDataType'] ]
+    return [USBItem.from_json(d, extra_data) for d in jdata['SPUSBDataType']]
+
 
 class USBItem:
-    def __init__(self, name: str, kind: str, tag: str, meta: dict, children: list):
+    def __init__(self, name: str, kind: str, vendor: str, model: str, serial: str, meta: dict, children: list):
         self.name = name
         self.kind = kind
-        self.tag = tag
+        self.vendor = vendor
+        self.model = model
         self.meta = meta
         self.children = children
+        self.sid = serial
 
-    kind_cols = {'port':93, 'hub':94, 'node':32}
+    def tag(self) -> str:
+        if len(self.vendor) > 0:
+            return f"({self.vendor}/{self.model})"
+        else:
+            return ""
+
+    kind_cols = {'port': 93, 'hub': 94, 'node': 32}
+
     def __repr__(self):
         init = '+ ' if self.kind in ['port, hub'] else 'o '
         l1 = color(init + self.name, [USBItem.kind_cols[self.kind], 1])
 
-        if len(self.tag) > 0:
-            l1 += color(' ' + self.tag, 35)
+        if len(self.vendor) > 0:
+            l1 += color(' ' + self.tag(), 35)
 
-        if len(self.meta) > 0:
-            meta = ' | '.join([color("%s: %s" % (k, v), 36) for k,v in self.meta.items()])
+        rendered_meta = []
+        for k, v in self.meta.items():
+            if k == 'volumes':
+                for i, vol in enumerate(v, start=1):
+                    vstr = f"Volume {i}: {vol['name']} ({vol['size']})"
+                    if 'mount_point' in vol:
+                        vstr += f" @ '{vol['mount_point']}'"
+                    rendered_meta.append(vstr)
+            elif k == 'serial_port':
+                rendered_meta.append(f"Serial Port: {v}")
+
+        if len(rendered_meta) > 0:
+            meta = ' | '.join([color(s, 36) for s in rendered_meta])
             ml = "\n| " + meta
         else:
             ml = ""
@@ -108,6 +134,17 @@ class USBItem:
             cl = '\n' + '\n'.join([bar_indent(str(i)) for i in self.children])
 
         return l1 + ml + cl + '\n'
+
+    def to_json(self) -> dict:
+        return {
+            'name': self.name,
+            'kind': self.kind,
+            'vendor': self.vendor,
+            'model': self.model,
+            'id': self.sid,
+            'meta': self.meta,
+            'children': [c.to_json() for c in self.children]
+        }
 
     @staticmethod
     def from_json(item: dict, extra_data):
@@ -123,9 +160,11 @@ class USBItem:
         if kind != 'port':
             vendor = item['vendor_id'].split(' ')[0]
             product = item['product_id']
-            tag = " (%s/%s)" % (vendor, product)
+            serial = item['serial_num'] if 'serial_num' in item else ""
         else:
-            tag = ""
+            vendor = ""
+            product = ""
+            serial = ""
 
         meta = {}
         if 'Media' in item:
@@ -133,12 +172,15 @@ class USBItem:
             for media in item['Media']:
                 volumes += media['volumes']
 
-            for (i, vol) in enumerate(volumes, start = 1):
-                voldata = "%s (%s)" % (vol['_name'], vol['size'])
+            voldats = []
+            for vol in volumes:
+                vd = {'name': vol['_name'], 'size': vol['size']}
                 if 'mount_point' in vol:
-                    voldata += " @ %s" % vol['mount_point']
-                key = "Volume %i" % i
-                meta[key] = voldata
+                    vd['mount_point'] = vol['mount_point']
+
+                voldats.append(vd)
+
+            meta['volumes'] = voldats
 
         if kind == 'node':
             loc = int(item['location_id'].split(' ')[0], 16)
@@ -146,13 +188,14 @@ class USBItem:
             if extra:
                 dials = list(gen_dict_extract('IODialinDevice', extra))
                 if len(dials) > 0:
-                    meta['Serial Port'] = dials[0]
+                    meta['serial_port'] = dials[0]
 
         children = []
         if '_items' in item:
-            children = [ USBItem.from_json(i, extra_data) for i in item['_items'] ]
+            children = [USBItem.from_json(i, extra_data) for i in item['_items']]
 
-        return USBItem(name, kind, tag, meta, children)
+        return USBItem(name, kind, vendor, product, serial, meta, children)
+
 
 class USBExtraData:
     def __init__(self):
@@ -180,7 +223,6 @@ class USBExtraData:
 
         return json.loads(puz.stdout.decode())
 
-
     def get(self):
         if self.data:
             return self.data
@@ -188,9 +230,15 @@ class USBExtraData:
             self.data = self.load()
             return self.data
 
-extra_data = USBExtraData()
 
-items = load_usb_items(extra_data)
+if __name__ == '__main__':
+    extra_data = USBExtraData()
 
-for i in items:
-    print(i)
+    items = load_usb_items(extra_data)
+
+    if len(sys.argv) > 1 and sys.argv[1] == '--json':
+        j = [item.to_json() for item in items]
+        print(json.dumps(j))
+    else:
+        for i in items:
+            print(i)
