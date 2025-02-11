@@ -157,9 +157,9 @@ class USBItem:
 
         name = item['_name'].strip()
 
-        if kind != 'port':
+        if kind == 'node':
             vendor = item['vendor_id'].split(' ')[0]
-            product = item['product_id']
+            product = item['product_id'] if 'product_id' in item else ""
             serial = item['serial_num'] if 'serial_num' in item else ""
         else:
             vendor = ""
